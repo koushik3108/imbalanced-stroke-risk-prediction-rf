@@ -1,4 +1,4 @@
-# stroke-risk-prediction-random-forest
+# imbalanced-stroke-risk-prediction-rf
 # 🧠 Imbalanced Stroke Risk Classification  
 ## A Random Forest Case Study on Rare-Event Prediction  
 
