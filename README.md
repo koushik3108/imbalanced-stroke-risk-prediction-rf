@@ -2,8 +2,7 @@
 # 🧠 Imbalanced Stroke Risk Classification  
 ## A Random Forest Case Study on Rare-Event Prediction  
 
-**Author:** Sai Koushik Soma  
-**Course:** CSDA 5320 – Analytics Applications Using Python  
+**Author:** Sai Koushik Soma   
 **Dataset:** Kaggle Stroke Prediction Dataset  
 **Records:** 5,110 Patients  
 
