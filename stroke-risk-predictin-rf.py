@@ -10,6 +10,7 @@ from sklearn.metrics import (
     classification_report,
     accuracy_score
 )
+from imblearn.over_sampling import SMOTE
 
 # Load and clean data
 df = pd.read_csv('healthcare-dataset-stroke-data.csv')
@@ -75,54 +76,109 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42, stratify=y
 )
 
-# Print counts
-print(f"Total observations: {len(df)}")
+# Print class distribution before SMOTE
+print(f"\nTotal observations: {len(df)}")
 print(f"Training set (80%): {len(X_train)} "
       f"(stroke = {y_train.sum()}, no stroke = {len(y_train) - y_train.sum()})")
 print(f"Test set (20%): {len(X_test)} "
       f"(stroke = {y_test.sum()}, no stroke = {len(y_test) - y_test.sum()})")
+print(f"\nClass imbalance ratio (before SMOTE): "
+      f"{(len(y_train) - y_train.sum()) / y_train.sum():.1f}:1 (no stroke : stroke)")
 
-# Random Forest modeling
-rf = RandomForestClassifier(n_estimators=100, random_state=42)
-rf.fit(X_train, y_train)
-y_pred = rf.predict(X_test)
+# ─── SMOTE: Oversample minority class (stroke=1) on training data only ───────
+print("\nApplying SMOTE to training data...")
+smote = SMOTE(random_state=42)
+X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
 
-# Evaluation metrics
-print("\nAccuracy:", accuracy_score(y_test, y_pred))
-print("\nClassification Report:\n", classification_report(y_test, y_pred))
+print(f"Training set after SMOTE: {len(X_train_smote)} "
+      f"(stroke = {y_train_smote.sum()}, no stroke = {len(y_train_smote) - y_train_smote.sum()})")
+print(f"Class balance after SMOTE: "
+      f"{(len(y_train_smote) - y_train_smote.sum()) / y_train_smote.sum():.1f}:1 (no stroke : stroke)")
 
-n_correct = (y_test == y_pred).sum()  # number of correct predictions
-n_total   = len(y_test)               # total test cases
+# Plot class distribution before and after SMOTE
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+axes[0].bar(['No Stroke', 'Stroke'],
+            [(y_train == 0).sum(), (y_train == 1).sum()],
+            color=['steelblue', 'tomato'])
+axes[0].set_title('Training Set — Before SMOTE')
+axes[0].set_ylabel('Count')
+for ax, counts in [(axes[0], y_train), (axes[1], y_train_smote)]:
+    vals = [(counts == 0).sum(), (counts == 1).sum()]
+    for i, v in enumerate(vals):
+        ax.text(i, v + 10, str(v), ha='center', fontweight='bold')
 
-# perform one‐sided z–test for a single proportion
+axes[1].bar(['No Stroke', 'Stroke'],
+            [(y_train_smote == 0).sum(), (y_train_smote == 1).sum()],
+            color=['steelblue', 'tomato'])
+axes[1].set_title('Training Set — After SMOTE')
+axes[1].set_ylabel('Count')
+plt.suptitle('Class Distribution Before vs After SMOTE', fontsize=13)
+plt.tight_layout()
+plt.show()
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─── Model 1: Without SMOTE ──────────────────────────────────────────────────
+print("\n" + "="*55)
+print("  Model 1: Random Forest WITHOUT SMOTE")
+print("="*55)
+rf_no_smote = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_no_smote.fit(X_train, y_train)
+y_pred_no_smote = rf_no_smote.predict(X_test)
+
+print("\nAccuracy:", accuracy_score(y_test, y_pred_no_smote))
+print("\nClassification Report:\n", classification_report(y_test, y_pred_no_smote))
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─── Model 2: With SMOTE ─────────────────────────────────────────────────────
+print("\n" + "="*55)
+print("  Model 2: Random Forest WITH SMOTE")
+print("="*55)
+rf_smote = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_smote.fit(X_train_smote, y_train_smote)
+y_pred_smote = rf_smote.predict(X_test)
+
+print("\nAccuracy:", accuracy_score(y_test, y_pred_smote))
+print("\nClassification Report:\n", classification_report(y_test, y_pred_smote))
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Z-test on SMOTE model
+n_correct = (y_test == y_pred_smote).sum()
+n_total   = len(y_test)
+
 stat, pval = proportions_ztest(
     count=n_correct,
     nobs=n_total,
-    value=0.5,            # null hypothesis proportion
-    alternative='larger'  # one‐sided test: p > 0.5
+    value=0.5,
+    alternative='larger'
 )
 
+print(f"\nZ-test (SMOTE model)")
 print(f"Test statistic (z) = {stat:.2f}")
-print(f"One‐sided p‐value   = {pval:.3e}")
+print(f"One-sided p-value   = {pval:.3e}")
 
-# Confusion matrix plot
-cm = confusion_matrix(y_test, y_pred)
-plt.figure(figsize=(5, 4))
-sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-            xticklabels=['No Stroke','Stroke'],
-            yticklabels=['No Stroke','Stroke'])
-plt.ylabel('Actual')
-plt.xlabel('Predicted')
-plt.title('Confusion Matrix')
+# ─── Side-by-side confusion matrices ─────────────────────────────────────────
+fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+for ax, y_pred, title in [
+    (axes[0], y_pred_no_smote, 'Without SMOTE'),
+    (axes[1], y_pred_smote,    'With SMOTE'),
+]:
+    cm = confusion_matrix(y_test, y_pred)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax,
+                xticklabels=['No Stroke', 'Stroke'],
+                yticklabels=['No Stroke', 'Stroke'])
+    ax.set_ylabel('Actual')
+    ax.set_xlabel('Predicted')
+    ax.set_title(f'Confusion Matrix — {title}')
 plt.tight_layout()
 plt.show()
+# ─────────────────────────────────────────────────────────────────────────────
 
-# # Feature importances plot
-importances = pd.Series(rf.feature_importances_, index=X.columns)
+# Feature importances (SMOTE model)
+importances = pd.Series(rf_smote.feature_importances_, index=X.columns)
 top_imp = importances.sort_values(ascending=False).head(10)
 plt.figure(figsize=(8, 5))
 sns.barplot(x=top_imp.values, y=top_imp.index)
-plt.title('Top 10 Feature Importances')
+plt.title('Top 10 Feature Importances (SMOTE Model)')
 plt.xlabel('Importance')
 plt.ylabel('Feature')
 plt.tight_layout()
